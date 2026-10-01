@@ -20,24 +20,24 @@ load_dotenv()
 
 def resolve_model_name(model_name: str | None) -> str:
     """Return a supported Gemini model name while tolerating older defaults."""
-    preferred = (model_name or os.getenv("MODEL_NAME") or "gemini-3.8-flash").strip()
+    preferred = (model_name or os.getenv("MODEL_NAME") or "gemini-1.5-flash").strip()
     normalized = preferred.lower()
 
     aliases = {
-        "gemini-1.5-flash": "gemini-3.8-flash",
-        "gemini-1.5-flash-latest": "gemini-3.8-flash",
-        "gemini-1.5-pro": "gemini-3.8-flash",
-        "gemini-2.0-flash": "gemini-3.8-flash",
-        "gemini-2.0-flash-lite": "gemini-3.8-flash",
-        "gemini-2.5-flash": "gemini-3.8-flash",
-        "gemini-3.8-flash": "gemini-3.8-flash",
+        "gemini-1.5-flash": "gemini-1.5-flash",
+        "gemini-1.5-flash-latest": "gemini-1.5-flash",
+        "gemini-1.5-pro": "gemini-1.5-flash",
+        "gemini-2.0-flash": "gemini-1.5-flash",
+        "gemini-2.0-flash-lite": "gemini-1.5-flash",
+        "gemini-2.5-flash": "gemini-1.5-flash",
+        "gemini-3.8-flash": "gemini-1.5-flash",
     }
 
     if normalized in aliases:
         return aliases[normalized]
     if normalized:
         return normalized
-    return "gemini-3.8-flash"
+    return "gemini-1.5-flash"
 
 
 def _load_gemini_sdk() -> None:
@@ -382,9 +382,6 @@ def generate_model_response(prompt: str, api_key: str | None = None, model_name:
             return getattr(response, "text", str(response))
         except Exception as exc:  # pragma: no cover - cloud/runtime safety
             message = str(exc).lower()
-
-            if "not found" in message or "unsupported" in message or "model" in message:
-                return f"The configured Gemini model '{resolved_model}' is not available for this account. Please verify your API key and model access at https://aistudio.google.com/"
 
             if "quota" in message or "limit" in message:
                 return "The API quota is exhausted or rate-limited for this key. Please try again later or increase your quota."
