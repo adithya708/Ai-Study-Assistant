@@ -20,20 +20,24 @@ load_dotenv()
 
 def resolve_model_name(model_name: str | None) -> str:
     """Return a supported Gemini model name while tolerating older defaults."""
-    preferred = (model_name or os.getenv("MODEL_NAME") or "gemini-3.8-flash").strip()
+    preferred = (model_name or os.getenv("MODEL_NAME") or "gemini-1.5-flash").strip()
     normalized = preferred.lower()
-    legacy_aliases = {
-        "gemini-1.5-flash": "gemini-3.8-flash",
-        "gemini-1.5-pro": "gemini-3.8-flash",
-        "gemini-1.5-flash-latest": "gemini-3.8-flash",
-        "gemini-2.0-flash": "gemini-3.8-flash",
-        "gemini-2.5-flash": "gemini-3.8-flash",
+
+    aliases = {
+        "gemini-1.5-flash": "gemini-1.5-flash",
+        "gemini-1.5-flash-latest": "gemini-1.5-flash",
+        "gemini-1.5-pro": "gemini-1.5-flash",
+        "gemini-2.0-flash": "gemini-2.0-flash",
+        "gemini-2.0-flash-lite": "gemini-2.0-flash",
+        "gemini-2.5-flash": "gemini-2.0-flash",
+        "gemini-3.8-flash": "gemini-1.5-flash",
     }
-    if normalized in legacy_aliases:
-        return legacy_aliases[normalized]
+
+    if normalized in aliases:
+        return aliases[normalized]
     if normalized:
         return normalized
-    return "gemini-3.8-flash"
+    return "gemini-1.5-flash"
 
 
 def _load_gemini_sdk() -> None:
@@ -352,9 +356,24 @@ def build_exam_prompt(exam_type: str, document_text: str, question: str | None =
 def generate_model_response(prompt: str, api_key: str | None = None, model_name: str | None = None) -> str:
     """Send a prompt to Gemini and return the model text."""
     resolved_key = api_key or get_api_key_from_settings()
-    model_names = [resolve_model_name(model_name)]
-    if model_names[0] != "gemini-3.8-flash":
-        model_names.append("gemini-3.8-flash")
+
+    candidate_models = []
+    primary = resolve_model_name(model_name)
+    candidate_models.append(primary)
+
+    if primary != "gemini-1.5-flash":
+        candidate_models.append("gemini-1.5-flash")
+    if primary != "gemini-2.0-flash":
+        candidate_models.append("gemini-2.0-flash")
+    if primary != "gemini-3.8-flash":
+        candidate_models.append("gemini-3.8-flash")
+
+    ordered_models = []
+    seen = set()
+    for model in candidate_models:
+        if model and model not in seen:
+            seen.add(model)
+            ordered_models.append(model)
 
     if not resolved_key:
         return "Missing API key: configure GEMINI_API_KEY in Streamlit secrets or a hosting environment variable before using the AI features."
@@ -364,7 +383,8 @@ def generate_model_response(prompt: str, api_key: str | None = None, model_name:
         return "The Gemini SDK is not installed. Please install the project dependencies."
 
     last_error: Exception | None = None
-    for resolved_model in model_names:
+
+    for resolved_model in ordered_models:
         for attempt in range(3):
             try:
                 if google_genai is not None:
@@ -382,30 +402,32 @@ def generate_model_response(prompt: str, api_key: str | None = None, model_name:
             except Exception as exc:  # pragma: no cover - cloud/runtime safety
                 last_error = exc
                 message = str(exc).lower()
-                if "not found" in message or "unsupported" in message or "model" in message and "is not found" in message:
-                    if resolved_model != "gemini-3.8-flash":
-                        break
-                    return (
-                        f"The configured Gemini model '{resolved_model}' is not available for this account. "
-                        "Update MODEL_NAME to a supported value such as 'gemini-3.8-flash'."
-                    )
+
+                if "not found" in message or "unsupported" in message:
+                    break
+
                 if "quota" in message or "limit" in message:
                     return "The API quota is exhausted or rate-limited for this key. Please try again later or increase your quota."
+
                 if "invalid api key" in message or "api key" in message:
                     return "The provided API key is invalid or expired. Update the key in Streamlit secrets or the hosting environment."
-                if "unavailable" in message or "timeout" in message or "service" in message or "503" in message or "high demand" in message:
+
+                if "unavailable" in message or "timeout" in message or "service" in message or "503" in message or "high demand" in message or "busy" in message:
                     if attempt < 2:
                         time.sleep(2 ** attempt)
                         continue
-                    return "The AI service is temporarily unavailable because Gemini is busy. Please try again in a few moments."
+                    continue
+
                 return f"The AI request failed while generating a response: {exc}. Please check your API configuration and try again."
 
     if last_error is not None:
         message = str(last_error).lower()
         if "quota" in message or "limit" in message:
             return "The API quota is exhausted or rate-limited for this key. Please try again later or increase your quota."
-        if "unavailable" in message or "timeout" in message or "service" in message or "503" in message or "high demand" in message:
-            return "The AI service is temporarily unavailable because Gemini is busy. Please try again in a few moments."
+
+        if "unavailable" in message or "timeout" in message or "service" in message or "503" in message or "high demand" in message or "busy" in message:
+            return "Gemini is currently busy or unavailable for this account. Please verify your API key and model access, then try again in a few minutes."
+
         return f"The AI request failed while generating a response: {last_error}. Please check your API configuration and try again."
 
     return "The Gemini service could not generate a response with the configured model. Please update the model name or API key."
