@@ -30,8 +30,49 @@ def get_model_context_limit() -> int:
 
 
 def resolve_model_name(model_name: str | None) -> str:
+<<<<<<< HEAD
     """Return the configured NVIDIA NIM model name."""
     return (model_name or os.getenv("NVIDIA_MODEL") or DEFAULT_NVIDIA_MODEL).strip()
+=======
+    """Return a supported Gemini model name while tolerating older defaults."""
+    preferred = (model_name or os.getenv("MODEL_NAME") or "gemini-1.5-flash").strip()
+    normalized = preferred.lower()
+
+    aliases = {
+        "gemini-1.5-flash": "gemini-1.5-flash",
+        "gemini-1.5-flash-latest": "gemini-1.5-flash",
+        "gemini-1.5-pro": "gemini-1.5-flash",
+        "gemini-2.0-flash": "gemini-1.5-flash",
+        "gemini-2.0-flash-lite": "gemini-1.5-flash",
+        "gemini-2.5-flash": "gemini-1.5-flash",
+        "gemini-3.8-flash": "gemini-1.5-flash",
+    }
+
+    if normalized in aliases:
+        return aliases[normalized]
+    if normalized:
+        return normalized
+    return "gemini-1.5-flash"
+
+
+def _load_gemini_sdk() -> None:
+    global google_genai, genai, _gemini_sdk_checked
+    if google_genai is not None or genai is not None or _gemini_sdk_checked:
+        return
+
+    _gemini_sdk_checked = True
+    try:
+        from google import genai as google_genai_module
+
+        google_genai = google_genai_module
+    except ImportError:
+        try:
+            import google.generativeai as legacy_genai
+
+            genai = legacy_genai
+        except ImportError:
+            return
+>>>>>>> dd187cf11852d1c6c01330b0365291867ae37c32
 
 
 def get_api_key_from_settings() -> str | None:
@@ -609,10 +650,17 @@ def generate_model_response_stream(
 ) -> Iterator[str]:
     """Yield response chunks from NVIDIA NIM as they arrive."""
     resolved_key = api_key or get_api_key_from_settings()
+<<<<<<< HEAD
+=======
+
+    resolved_model = resolve_model_name(model_name)
+
+>>>>>>> dd187cf11852d1c6c01330b0365291867ae37c32
     if not resolved_key:
         yield "Missing NVIDIA API key: configure NVIDIA_API_KEY in Streamlit secrets or a hosting environment variable."
         return
 
+<<<<<<< HEAD
     selected_model = resolve_model_name(model_name)
     try:
         yield from _nvidia_chat_completion_stream(
@@ -622,6 +670,44 @@ def generate_model_response_stream(
         )
     except ValueError as exc:
         yield str(exc)
+=======
+    _load_gemini_sdk()
+    if google_genai is None and genai is None:
+        return "The Gemini SDK is not installed. Please install the project dependencies."
+
+    for attempt in range(3):
+        try:
+            if google_genai is not None:
+                client = google_genai.Client(api_key=resolved_key)
+                response = client.models.generate_content(
+                    model=resolved_model,
+                    contents=prompt,
+                )
+                return getattr(response, "text", str(response))
+
+            genai.configure(api_key=resolved_key)
+            model = genai.GenerativeModel(resolved_model)
+            response = model.generate_content(prompt)
+            return getattr(response, "text", str(response))
+        except Exception as exc:  # pragma: no cover - cloud/runtime safety
+            message = str(exc).lower()
+
+            if "quota" in message or "limit" in message:
+                return "The API quota is exhausted or rate-limited for this key. Please try again later or increase your quota."
+
+            if "invalid api key" in message or "api key" in message:
+                return "The provided API key is invalid or expired. Update the key in Streamlit secrets or the hosting environment."
+
+            if "unavailable" in message or "timeout" in message or "service" in message or "503" in message or "high demand" in message or "busy" in message:
+                if attempt < 2:
+                    time.sleep(2 ** attempt)
+                    continue
+                return "Gemini is currently busy or unavailable. Please try again in a few moments."
+
+            return f"The AI request failed while generating a response: {exc}. Please check your API configuration and try again."
+
+    return "The Gemini service could not generate a response with the configured model. Please update the model name or API key."
+>>>>>>> dd187cf11852d1c6c01330b0365291867ae37c32
 
 
 def stream_ask_ai(
