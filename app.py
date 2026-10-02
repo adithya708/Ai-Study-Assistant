@@ -38,11 +38,7 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Settings")
-<<<<<<< HEAD
         st.markdown(f"NVIDIA model: `{os.getenv('NVIDIA_MODEL', 'nvidia/nemotron-3.5-lightning-30b-a3b')}`")
-=======
-        st.markdown(f"Model: `{os.getenv('MODEL_NAME', 'gemini-1.5-flash')}`")
->>>>>>> dd187cf11852d1c6c01330b0365291867ae37c32
         st.markdown(f"Max file size: `{os.getenv('MAX_FILE_SIZE_MB', '20')} MB`")
         st.markdown(f"Max pages: `{os.getenv('MAX_PAGES', '80')}`")
 
