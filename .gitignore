@@ -5,6 +5,7 @@ venv/
 # Environment and secrets
 .env
 .env.*
+!.env.example
 .streamlit/*
 !.streamlit/secrets.toml.example
 secrets.toml

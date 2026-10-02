@@ -9,7 +9,7 @@ This project is designed for Streamlit Community Cloud because it is purpose-bui
 - Python 3.11+
 - GitHub repository
 - Streamlit Community Cloud account
-- Gemini API key
+- NVIDIA API key with access to the selected NIM model
 - Internet access to deploy and test the app
 
 ## 3. GitHub repository setup
@@ -34,8 +34,9 @@ This project is designed for Streamlit Community Cloud because it is purpose-bui
 In Streamlit Community Cloud, add the following secret values in the dashboard:
 
 ```toml
-GEMINI_API_KEY = "your_live_key"
-MODEL_NAME = "gemini-3.8-flash"
+NVIDIA_API_KEY = "your_nvidia_api_key"
+NVIDIA_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
+NVIDIA_VISION_MODEL = "meta/llama-3.2-11b-vision-instruct"
 ```
 
 Never place the key in the source code or UI.
@@ -55,7 +56,7 @@ This environment does not have live hosting credentials or deployment approval, 
 
 ## 7. Deployment limitations, API costs, and security considerations
 
-- API usage may incur charges.
+- NVIDIA API usage is subject to account quotas, rate limits, and model availability.
 - Rate limits and quotas may temporarily block requests.
 - Public deployment exposes an HTTPS URL, so all API interactions must remain secure.
 - Keys must never be stored in the repository or logged.

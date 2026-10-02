@@ -1,6 +1,6 @@
 # AI Study Assistant
 
-A Streamlit-based AI study assistant that uploads PDF documents, extracts text, and answers study questions using Gemini. The application is designed to run locally and also to be deployed on Streamlit Community Cloud without code changes.
+A Streamlit-based AI study assistant that uploads PDF documents or photos, extracts text, and answers study questions using NVIDIA NIM APIs. The application is designed to run locally and also to be deployed on Streamlit Community Cloud without code changes.
 
 ## 1. Hosting platform and reason for choosing it
 
@@ -19,7 +19,7 @@ Before deployment, ensure you have:
 - Python 3.11+
 - A GitHub account
 - A Streamlit Community Cloud account
-- A valid Gemini API key
+- An NVIDIA API key from NVIDIA's developer platform
 - A PDF document or study notes for testing
 
 Install local dependencies:
@@ -37,8 +37,10 @@ copy .env.example .env
 Then set your key in the local environment or in secrets:
 
 ```env
-GEMINI_API_KEY=your_api_key_here
-MODEL_NAME=gemini-3.8-flash
+NVIDIA_API_KEY=your_nvidia_api_key_here
+NVIDIA_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b
+NVIDIA_VISION_MODEL=meta/llama-3.2-11b-vision-instruct
+NVIDIA_API_BASE_URL=https://integrate.api.nvidia.com/v1
 ```
 
 Do not commit real API keys to GitHub. Use secrets in production.
@@ -73,8 +75,10 @@ For Streamlit Community Cloud, use the app secrets manager:
 
 ```toml
 # .streamlit/secrets.toml
-GEMINI_API_KEY = "your_real_key_here"
-MODEL_NAME = "gemini-3.8-flash"
+NVIDIA_API_KEY = "your_nvidia_api_key_here"
+NVIDIA_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
+NVIDIA_VISION_MODEL = "meta/llama-3.2-11b-vision-instruct"
+NVIDIA_API_BASE_URL = "https://integrate.api.nvidia.com/v1"
 ```
 
 Do not put the value in source code, notebooks, logs, or UI output.
@@ -87,21 +91,24 @@ streamlit run app.py
 
 ## 6. Features
 
-- Upload PDF files
-- Extract readable text from the document
+- Upload PDF files or photos of notes (JPG, JPEG, PNG, WebP, BMP, and TIFF)
+- Extract readable text from PDFs and use local OCR to read text from photos, with contrast and resolution normalization before recognition
+- EasyOCR uses only cached local models to avoid hanging on first-use downloads; if local photo OCR is unavailable or fails, the configured NVIDIA vision model is used. This sends the photo to NVIDIA and may incur API usage
 - Ask questions about the uploaded content
+- Stream AI answers as they are generated. By default, the AI receives up to 200,000 characters of document context and can generate up to 2,048 tokens per response for more complete study materials. Longer responses may take more time. Adjust `MAX_MODEL_CONTEXT_CHARS` and `MAX_OUTPUT_TOKENS` if needed.
 - Generate a concise study summary
 - Build flashcards
 - Generate a quiz
-- OCR and Gemini SDKs are loaded only when needed; extracted text is kept for the current session, avoiding repeated file reads, hashing, and PDF parsing on app reruns
+- NVIDIA requests use the OpenAI-compatible NIM chat completions API; extracted text is cached to avoid repeating OCR or PDF parsing on reruns
 
 ## 7. Health and error handling
 
 The app shows clear messages when:
 - The API key is missing
-- The API quota is exhausted
+- The NVIDIA API quota is exhausted
 - The AI service is unavailable or rate-limited
-- The uploaded PDF has no readable text
+- Local photo OCR fails and NVIDIA Vision fallback is unavailable
+- The uploaded PDF or photo has no readable text
 
 These messages are shown in the UI instead of exposing raw API errors or secrets.
 
@@ -116,10 +123,11 @@ Deployed verification is pending actual hosting credentials and public approval.
 
 ## 9. Deployment limitations, API costs, and security considerations
 
-- Gemini API usage may incur charges based on token volume and request count.
+- NVIDIA API usage may be subject to model quotas and account limits.
 - Cloud deployment depends on the platform and account approval.
 - Rate limits and usage quotas can affect the app during high traffic.
 - API keys must stay out of GitHub, logs, and UI code.
+- Configure `NVIDIA_MODEL` and `NVIDIA_VISION_MODEL` with model IDs enabled for your NVIDIA API key.
 - Always use a secrets manager or environment variables for production.
 
 ## 10. Deployment placeholders
