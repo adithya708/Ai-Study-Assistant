@@ -35,7 +35,7 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Settings")
-        st.markdown(f"Model: `{os.getenv('MODEL_NAME', 'gemini-3.8-flash')}`")
+        st.markdown(f"Model: `{os.getenv('MODEL_NAME', 'gemini-1.5-flash')}`")
         st.markdown(f"Max file size: `{os.getenv('MAX_FILE_SIZE_MB', '20')} MB`")
         st.markdown(f"Max pages: `{os.getenv('MAX_PAGES', '80')}`")
 
@@ -123,7 +123,7 @@ def main() -> None:
             if api_key:
                 st.session_state.chat_history.append({"role": "user", "content": user_input})
                 with st.spinner("Generating response..."):
-                    answer = ask_gemini(user_input, text, api_key=api_key, model_name=os.getenv("MODEL_NAME", "gemini-3.8-flash"))
+                    answer = ask_gemini(user_input, text, api_key=api_key, model_name=os.getenv("MODEL_NAME", "gemini-1.5-flash"))
                 st.session_state.chat_history.append({"role": "assistant", "content": answer})
                 st.rerun()
 
@@ -136,7 +136,7 @@ def main() -> None:
                 api_key = get_api_key()
                 if api_key:
                     with st.spinner("Thinking through the document..."):
-                        answer = ask_gemini(question, text, api_key=api_key, model_name=os.getenv("MODEL_NAME", "gemini-3.8-flash"))
+                        answer = ask_gemini(question, text, api_key=api_key, model_name=os.getenv("MODEL_NAME", "gemini-1.5-flash"))
                     st.subheader("Answer")
                     st.write(answer)
 
@@ -149,7 +149,7 @@ def main() -> None:
                 api_key = get_api_key()
                 if api_key:
                     with st.spinner("Explaining the concept..."):
-                        explanation = explain_concept(concept, text, api_key=api_key, model_name=os.getenv("MODEL_NAME", "gemini-3.8-flash"))
+                        explanation = explain_concept(concept, text, api_key=api_key, model_name=os.getenv("MODEL_NAME", "gemini-1.5-flash"))
                     st.subheader("Concept explanation")
                     st.write(explanation)
 
@@ -167,7 +167,7 @@ def main() -> None:
                             exam_type,
                             text,
                             api_key=api_key,
-                            model_name=os.getenv("MODEL_NAME", "gemini-3.8-flash"),
+                            model_name=os.getenv("MODEL_NAME", "gemini-1.5-flash"),
                             question=exam_question,
                         )
                     st.subheader(f"{exam_type} answer")
@@ -178,7 +178,7 @@ def main() -> None:
             api_key = get_api_key()
             if api_key:
                 with st.spinner("Creating a study summary..."):
-                    summary = generate_summary(text, api_key=api_key, model_name=os.getenv("MODEL_NAME", "gemini-3.8-flash"))
+                    summary = generate_summary(text, api_key=api_key, model_name=os.getenv("MODEL_NAME", "gemini-1.5-flash"))
                 st.subheader("Summary")
                 st.write(summary)
 
@@ -187,7 +187,7 @@ def main() -> None:
             api_key = get_api_key()
             if api_key:
                 with st.spinner("Creating flashcards..."):
-                    flashcards = generate_flashcards(text, api_key=api_key, model_name=os.getenv("MODEL_NAME", "gemini-3.8-flash"))
+                    flashcards = generate_flashcards(text, api_key=api_key, model_name=os.getenv("MODEL_NAME", "gemini-1.5-flash"))
                 st.subheader("Flashcards")
                 st.write(flashcards)
 
@@ -196,7 +196,7 @@ def main() -> None:
             api_key = get_api_key()
             if api_key:
                 with st.spinner("Formulating quiz questions..."):
-                    quiz = generate_quiz(text, api_key=api_key, model_name=os.getenv("MODEL_NAME", "gemini-3.8-flash"))
+                    quiz = generate_quiz(text, api_key=api_key, model_name=os.getenv("MODEL_NAME", "gemini-1.5-flash"))
                 st.subheader("Quiz")
                 st.write(quiz)
 
