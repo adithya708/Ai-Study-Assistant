@@ -99,8 +99,8 @@ def test_generate_model_response_uses_nvidia_chat_completions(monkeypatch) -> No
         ok = True
 
         @staticmethod
-        def iter_lines(chunk_size=1, decode_unicode=True):
-            assert chunk_size == 1
+        def iter_lines(chunk_size=512, decode_unicode=True):
+            assert chunk_size == 512
             return [
                 'data: {"choices":[{"delta":{"content":"NVIDIA "}}]}',
                 'data: {"choices":[{"delta":{"content":"response"}}]}',
@@ -127,6 +127,94 @@ def test_generate_model_response_uses_nvidia_chat_completions(monkeypatch) -> No
     assert captured["payload"]["stream"] is True
     assert captured["payload"]["max_tokens"] == study_assistant.DEFAULT_MAX_OUTPUT_TOKENS
     assert captured["stream"] is True
+
+
+def test_nvidia_stream_retries_once_if_connection_fails_before_answer(monkeypatch) -> None:
+    import requests
+
+    class InterruptedResponse:
+        ok = True
+        status_code = 200
+
+        @staticmethod
+        def iter_lines(chunk_size, decode_unicode):
+            raise requests.ConnectionError("connection reset")
+
+        @staticmethod
+        def close():
+            return None
+
+    class SuccessfulResponse:
+        ok = True
+        status_code = 200
+
+        @staticmethod
+        def iter_lines(chunk_size, decode_unicode):
+            return [
+                'data: {"choices":[{"delta":{"content":"Recovered answer"}}]}',
+                "data: [DONE]",
+            ]
+
+        @staticmethod
+        def close():
+            return None
+
+    responses = [InterruptedResponse(), SuccessfulResponse()]
+    calls = []
+
+    def fake_post(*args, **kwargs):
+        calls.append((args, kwargs))
+        return responses.pop(0)
+
+    monkeypatch.setattr(requests, "post", fake_post)
+
+    chunks = list(
+        study_assistant._nvidia_chat_completion_stream(
+            [{"role": "user", "content": "hello"}],
+            "test-key",
+            "nvidia/test-model",
+        )
+    )
+
+    assert chunks == ["Recovered answer"]
+    assert len(calls) == 2
+
+
+def test_nvidia_stream_does_not_replay_after_partial_answer(monkeypatch) -> None:
+    import requests
+
+    class PartialResponse:
+        ok = True
+        status_code = 200
+
+        @staticmethod
+        def iter_lines(chunk_size, decode_unicode):
+            yield 'data: {"choices":[{"delta":{"content":"Partial"}}]}'
+            raise requests.ConnectionError("connection reset")
+
+        @staticmethod
+        def close():
+            return None
+
+    calls = []
+
+    def fake_post(*args, **kwargs):
+        calls.append((args, kwargs))
+        return PartialResponse()
+
+    monkeypatch.setattr(requests, "post", fake_post)
+
+    chunks = list(
+        study_assistant.generate_model_response_stream(
+            "hello",
+            api_key="test-key",
+            model_name="nvidia/test-model",
+        )
+    )
+
+    assert chunks[0] == "Partial"
+    assert "partial answer" in chunks[1]
+    assert len(calls) == 1
 
 
 def test_ocr_dependencies_are_not_imported_during_normal_startup() -> None:

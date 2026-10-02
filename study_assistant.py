@@ -30,49 +30,8 @@ def get_model_context_limit() -> int:
 
 
 def resolve_model_name(model_name: str | None) -> str:
-<<<<<<< HEAD
     """Return the configured NVIDIA NIM model name."""
     return (model_name or os.getenv("NVIDIA_MODEL") or DEFAULT_NVIDIA_MODEL).strip()
-=======
-    """Return a supported Gemini model name while tolerating older defaults."""
-    preferred = (model_name or os.getenv("MODEL_NAME") or "gemini-1.5-flash").strip()
-    normalized = preferred.lower()
-
-    aliases = {
-        "gemini-1.5-flash": "gemini-1.5-flash",
-        "gemini-1.5-flash-latest": "gemini-1.5-flash",
-        "gemini-1.5-pro": "gemini-1.5-flash",
-        "gemini-2.0-flash": "gemini-1.5-flash",
-        "gemini-2.0-flash-lite": "gemini-1.5-flash",
-        "gemini-2.5-flash": "gemini-1.5-flash",
-        "gemini-3.8-flash": "gemini-1.5-flash",
-    }
-
-    if normalized in aliases:
-        return aliases[normalized]
-    if normalized:
-        return normalized
-    return "gemini-1.5-flash"
-
-
-def _load_gemini_sdk() -> None:
-    global google_genai, genai, _gemini_sdk_checked
-    if google_genai is not None or genai is not None or _gemini_sdk_checked:
-        return
-
-    _gemini_sdk_checked = True
-    try:
-        from google import genai as google_genai_module
-
-        google_genai = google_genai_module
-    except ImportError:
-        try:
-            import google.generativeai as legacy_genai
-
-            genai = legacy_genai
-        except ImportError:
-            return
->>>>>>> dd187cf11852d1c6c01330b0365291867ae37c32
 
 
 def get_api_key_from_settings() -> str | None:
@@ -268,7 +227,7 @@ def _nvidia_chat_completion_stream(
     api_key: str,
     model_name: str,
     *,
-    timeout: int = 60,
+    timeout: int = 180,
 ) -> Iterator[str]:
     import requests
 
@@ -276,56 +235,65 @@ def _nvidia_chat_completion_stream(
     if not endpoint.endswith("/chat/completions"):
         endpoint = f"{endpoint}/chat/completions"
 
-    try:
-        response = requests.post(
-            endpoint,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": model_name,
-                "messages": messages,
-                "temperature": 0.2,
-                "max_tokens": int(os.getenv("MAX_OUTPUT_TOKENS", str(DEFAULT_MAX_OUTPUT_TOKENS))),
-                "stream": True,
-            },
-            timeout=(10, timeout),
-            stream=True,
-        )
-    except requests.Timeout:
-        raise ValueError("The NVIDIA API request timed out. Please retry.") from None
-    except requests.RequestException:
-        raise ValueError("Could not connect to the NVIDIA API. Check your network and API endpoint.") from None
+    for attempt in range(2):
+        response = None
+        emitted_content = False
+        try:
+            response = requests.post(
+                endpoint,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": model_name,
+                    "messages": messages,
+                    "temperature": 0.2,
+                    "max_tokens": int(os.getenv("MAX_OUTPUT_TOKENS", str(DEFAULT_MAX_OUTPUT_TOKENS))),
+                    "stream": True,
+                },
+                timeout=(10, timeout),
+                stream=True,
+            )
+            if not response.ok:
+                raise ValueError(_nvidia_http_error(response.status_code, model_name))
 
-    try:
-        if not response.ok:
-            raise ValueError(_nvidia_http_error(response.status_code, model_name))
-
-        for line in response.iter_lines(chunk_size=1, decode_unicode=True):
-            if not line:
+            for line in response.iter_lines(chunk_size=512, decode_unicode=True):
+                if not line:
+                    continue
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8")
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    return
+                try:
+                    event = json.loads(data)
+                    delta = event["choices"][0].get("delta", {}).get("content")
+                except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+                    continue
+                if isinstance(delta, str) and delta:
+                    emitted_content = True
+                    yield delta
+                elif isinstance(delta, list):
+                    for part in delta:
+                        if isinstance(part, dict) and part.get("text"):
+                            emitted_content = True
+                            yield part["text"]
+            return
+        except requests.Timeout:
+            if attempt == 0 and not emitted_content:
                 continue
-            if isinstance(line, bytes):
-                line = line.decode("utf-8")
-            if not line.startswith("data:"):
+            if emitted_content:
+                raise ValueError("The NVIDIA stream timed out after a partial answer. Please retry.") from None
+            raise ValueError("The NVIDIA API response timed out. Please retry.") from None
+        except requests.RequestException:
+            if attempt == 0 and not emitted_content:
                 continue
-            data = line[5:].strip()
-            if data == "[DONE]":
-                break
-            try:
-                event = json.loads(data)
-                delta = event["choices"][0].get("delta", {}).get("content")
-            except (json.JSONDecodeError, KeyError, IndexError, TypeError):
-                continue
-            if isinstance(delta, str) and delta:
-                yield delta
-            elif isinstance(delta, list):
-                for part in delta:
-                    if isinstance(part, dict) and part.get("text"):
-                        yield part["text"]
-    except requests.Timeout:
-        raise ValueError("The NVIDIA API response timed out. Please retry.") from None
-    except requests.RequestException:
-        raise ValueError("The NVIDIA API stream was interrupted. Please retry.") from None
-    finally:
-        response.close()
+            if emitted_content:
+                raise ValueError("The NVIDIA stream was interrupted after a partial answer. Please retry.") from None
+            raise ValueError("The NVIDIA API stream was interrupted. Please retry.") from None
+        finally:
+            if response is not None:
+                response.close()
 
 
 @lru_cache(maxsize=1)
@@ -650,17 +618,10 @@ def generate_model_response_stream(
 ) -> Iterator[str]:
     """Yield response chunks from NVIDIA NIM as they arrive."""
     resolved_key = api_key or get_api_key_from_settings()
-<<<<<<< HEAD
-=======
-
-    resolved_model = resolve_model_name(model_name)
-
->>>>>>> dd187cf11852d1c6c01330b0365291867ae37c32
     if not resolved_key:
         yield "Missing NVIDIA API key: configure NVIDIA_API_KEY in Streamlit secrets or a hosting environment variable."
         return
 
-<<<<<<< HEAD
     selected_model = resolve_model_name(model_name)
     try:
         yield from _nvidia_chat_completion_stream(
@@ -670,44 +631,6 @@ def generate_model_response_stream(
         )
     except ValueError as exc:
         yield str(exc)
-=======
-    _load_gemini_sdk()
-    if google_genai is None and genai is None:
-        return "The Gemini SDK is not installed. Please install the project dependencies."
-
-    for attempt in range(3):
-        try:
-            if google_genai is not None:
-                client = google_genai.Client(api_key=resolved_key)
-                response = client.models.generate_content(
-                    model=resolved_model,
-                    contents=prompt,
-                )
-                return getattr(response, "text", str(response))
-
-            genai.configure(api_key=resolved_key)
-            model = genai.GenerativeModel(resolved_model)
-            response = model.generate_content(prompt)
-            return getattr(response, "text", str(response))
-        except Exception as exc:  # pragma: no cover - cloud/runtime safety
-            message = str(exc).lower()
-
-            if "quota" in message or "limit" in message:
-                return "The API quota is exhausted or rate-limited for this key. Please try again later or increase your quota."
-
-            if "invalid api key" in message or "api key" in message:
-                return "The provided API key is invalid or expired. Update the key in Streamlit secrets or the hosting environment."
-
-            if "unavailable" in message or "timeout" in message or "service" in message or "503" in message or "high demand" in message or "busy" in message:
-                if attempt < 2:
-                    time.sleep(2 ** attempt)
-                    continue
-                return "Gemini is currently busy or unavailable. Please try again in a few moments."
-
-            return f"The AI request failed while generating a response: {exc}. Please check your API configuration and try again."
-
-    return "The Gemini service could not generate a response with the configured model. Please update the model name or API key."
->>>>>>> dd187cf11852d1c6c01330b0365291867ae37c32
 
 
 def stream_ask_ai(
